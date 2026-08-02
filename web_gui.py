@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """web_gui.py: Web-based Desktop Interface for screenstudio-to-mp4.
 
-Bypasses legacy Apple Tcl/Tk version crashes by providing a modern Web UI
-with native macOS osascript file dialogs, drag-and-drop file support,
-and real-time progress updates.
+Uses native HTML5 file inputs and drag-and-drop to open file selection dialogs
+directly in your web browser with zero osascript or Tcl/Tk permissions issues.
 """
 
 import os
@@ -49,22 +48,6 @@ class ProgressTracker:
 
 
 global_tracker = ProgressTracker()
-
-
-def run_mac_file_dialog(prompt: str, is_folder: bool = True) -> str:
-    """Use native macOS osascript with explicit frontmost window activation."""
-    if is_folder:
-        script = f'tell application "System Events"\nactivate\nset f to choose folder with prompt "{prompt}"\nreturn posix path of f\nend tell'
-    else:
-        script = f'tell application "System Events"\nactivate\nset f to choose file name with prompt "{prompt}" default name "export.mp4"\nreturn posix path of f\nend tell'
-
-    try:
-        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=120)
-        if res.returncode == 0:
-            return res.stdout.strip()
-    except Exception as e:
-        print("osascript execution error:", e)
-    return ""
 
 
 HTML_CONTENT = """<!DOCTYPE html>
@@ -117,16 +100,17 @@ HTML_CONTENT = """<!DOCTYPE html>
     .drop-zone {
       border: 2px dashed #45475a;
       border-radius: 8px;
-      padding: 20px;
+      padding: 24px;
       text-align: center;
       color: var(--subtext);
-      margin-bottom: 14px;
+      margin-bottom: 16px;
       cursor: pointer;
       transition: all 0.2s ease;
+      font-weight: 500;
     }
     .drop-zone:hover, .drop-zone.dragover {
       border-color: var(--accent);
-      background: rgba(137, 180, 250, 0.05);
+      background: rgba(137, 180, 250, 0.08);
       color: var(--text);
     }
     .field {
@@ -155,7 +139,7 @@ HTML_CONTENT = """<!DOCTYPE html>
       border-radius: 8px;
       font-size: 13px;
     }
-    button {
+    button, .btn-browse {
       background: #313244;
       color: var(--text);
       border: none;
@@ -165,8 +149,12 @@ HTML_CONTENT = """<!DOCTYPE html>
       font-size: 12px;
       cursor: pointer;
       transition: background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      text-decoration: none;
     }
-    button:hover {
+    button:hover, .btn-browse:hover {
       background: var(--accent);
       color: #11111b;
     }
@@ -220,28 +208,37 @@ HTML_CONTENT = """<!DOCTYPE html>
   </style>
 </head>
 <body>
+  <!-- Hidden Native File Inputs -->
+  <input type="file" id="nativeFilePicker" style="display:none" onchange="onNativeFileSelected(event)">
+  <input type="file" id="nativeFolderPicker" style="display:none" webkitdirectory directory onchange="onNativeFolderSelected(event)">
+  <input type="file" id="nativeFramePicker" style="display:none" accept="image/*" onchange="onNativeFrameSelected(event)">
+
   <div class="container">
     <h1>🎬 screenstudio-to-mp4</h1>
     <p class="subtitle">Export macOS Screen Studio recordings to MP4 — free, offline, no subscription.</p>
 
     <div class="card">
-      <div class="drop-zone" id="dropZone" ondragover="event.preventDefault(); this.classList.add('dragover');" ondragleave="this.classList.remove('dragover');" ondrop="handleDrop(event)">
-        📥 Drag & Drop your .screenstudio file/folder here, or click Browse below
+      <div class="drop-zone" id="dropZone" 
+           onclick="document.getElementById('nativeFolderPicker').click()"
+           ondragover="event.preventDefault(); this.classList.add('dragover');" 
+           ondragleave="this.classList.remove('dragover');" 
+           ondrop="handleDrop(event)">
+        📥 Drag & Drop your .screenstudio file/folder here, or click to choose
       </div>
 
       <div class="field">
         <label>📁 .screenstudio Recording Package Path:</label>
         <div class="input-row">
           <input type="text" id="bundlePath" placeholder="/Users/.../Recording.screenstudio">
-          <button onclick="browseBundle()">Browse...</button>
+          <button class="btn-browse" onclick="document.getElementById('nativeFolderPicker').click()">Browse Folder...</button>
+          <button class="btn-browse" onclick="document.getElementById('nativeFilePicker').click()">Browse File...</button>
         </div>
       </div>
 
       <div class="field">
-        <label>💾 Output MP4 Destination:</label>
+        <label>💾 Output MP4 Destination Path:</label>
         <div class="input-row">
           <input type="text" id="outputPath" placeholder="/Users/.../Downloads/Output.mp4">
-          <button onclick="browseOutput()">Save As...</button>
         </div>
       </div>
     </div>
@@ -253,7 +250,7 @@ HTML_CONTENT = """<!DOCTYPE html>
         <label>Custom Background Frame Image (Optional):</label>
         <div class="input-row">
           <input type="text" id="framePath" placeholder="Path to wallpaper PNG/JPG">
-          <button onclick="browseFrame()">Select Image...</button>
+          <button class="btn-browse" onclick="document.getElementById('nativeFramePicker').click()">Select Image...</button>
         </div>
       </div>
 
@@ -289,40 +286,41 @@ HTML_CONTENT = """<!DOCTYPE html>
       if (e.dataTransfer.files.length > 0) {
         const file = e.dataTransfer.files[0];
         const path = file.path || file.name;
-        document.getElementById('bundlePath').value = path;
-        if (!document.getElementById('outputPath').value) {
-          const name = path.split('/').pop().replace('.screenstudio', '') + '.mp4';
-          document.getElementById('outputPath').value = `/Users/solahudeen/Downloads/${name}`;
-        }
+        setBundlePath(path);
       }
     }
 
-    async function browseBundle() {
-      document.getElementById('statusMsg').innerText = "Opening Finder folder picker...";
-      const res = await fetch('/api/browse-bundle', { method: 'POST' });
-      const data = await res.json();
-      if (data.path) {
-        document.getElementById('bundlePath').value = data.path;
-        if (!document.getElementById('outputPath').value) {
-          const name = data.path.split('/').pop().replace('.screenstudio', '') + '.mp4';
-          document.getElementById('outputPath').value = `/Users/solahudeen/Downloads/${name}`;
-        }
-        document.getElementById('statusMsg').innerText = "Selected bundle: " + data.path;
-      } else {
-        document.getElementById('statusMsg').innerText = "Ready for export.";
+    function onNativeFolderSelected(e) {
+      if (e.target.files.length > 0) {
+        const file = e.target.files[0];
+        // Relative path inside folder package (e.g. MyRecording.screenstudio/meta.json)
+        const rel = file.webkitRelativePath || file.name;
+        const folderName = rel.split('/')[0];
+        setBundlePath(file.path || folderName);
       }
     }
 
-    async function browseOutput() {
-      const res = await fetch('/api/browse-output', { method: 'POST' });
-      const data = await res.json();
-      if (data.path) document.getElementById('outputPath').value = data.path;
+    function onNativeFileSelected(e) {
+      if (e.target.files.length > 0) {
+        const file = e.target.files[0];
+        setBundlePath(file.path || file.name);
+      }
     }
 
-    async function browseFrame() {
-      const res = await fetch('/api/browse-frame', { method: 'POST' });
-      const data = await res.json();
-      if (data.path) document.getElementById('framePath').value = data.path;
+    function onNativeFrameSelected(e) {
+      if (e.target.files.length > 0) {
+        const file = e.target.files[0];
+        document.getElementById('framePath').value = file.path || file.name;
+      }
+    }
+
+    function setBundlePath(path) {
+      document.getElementById('bundlePath').value = path;
+      if (!document.getElementById('outputPath').value) {
+        const base = path.split('/').pop().replace('.screenstudio', '');
+        document.getElementById('outputPath').value = `/Users/solahudeen/Downloads/${base}.mp4`;
+      }
+      document.getElementById('statusMsg').innerText = "Selected: " + path;
     }
 
     async function startExport() {
@@ -401,19 +399,7 @@ class WebGUIRequestHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get('Content-Length', 0))
         body_bytes = self.rfile.read(length) if length > 0 else b""
 
-        if self.path == "/api/browse-bundle":
-            path = run_mac_file_dialog("Select .screenstudio Recording Package", is_folder=True)
-            self._send_json({"path": path})
-
-        elif self.path == "/api/browse-output":
-            path = run_mac_file_dialog("Save Output MP4 As", is_folder=False)
-            self._send_json({"path": path})
-
-        elif self.path == "/api/browse-frame":
-            path = run_mac_file_dialog("Select Custom Background Frame Image", is_folder=False)
-            self._send_json({"path": path})
-
-        elif self.path == "/api/export":
+        if self.path == "/api/export":
             data = json.loads(body_bytes.decode("utf-8"))
             bundle = data.get("bundle")
             output = data.get("output")
