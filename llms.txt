@@ -1,0 +1,8 @@
+# screenstudio-to-mp4
+
+> Export macOS Screen Studio `.screenstudio` project bundles to MP4 using Python and ffmpeg.
+
+## Docs
+- README: /README.md
+- Format spec: /docs/format.md
+- Scripts: /scripts/inspect_bundle.py, /scripts/prepare_render.py, /scripts/cursor_layer.py
