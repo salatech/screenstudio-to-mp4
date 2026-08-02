@@ -11,7 +11,6 @@ Key invariants baked in (learned the hard way):
   * Display captures are VFR -> the chain ALWAYS starts fps=<fps>,setpts=PTS-STARTPTS
     before zoompan, else video drifts ahead of audio proportionally to dropped frames.
   * Stream synchronization: PTS-STARTPTS zero-bases timestamps to prevent progressive audio drift.
-  * Stream synchronization: PTS-STARTPTS zero-bases timestamps to prevent progressive audio drift.
   * zoompan (not crop) is used for animated zoom; its clock is output frame index: t=(on/fps).
   * Cursor layer (if enabled) is overlaid AFTER the fps fix and BEFORE zoompan so it
     rides zoom/pan exactly like Screen Studio.
@@ -348,7 +347,6 @@ echo PREVIEW_EXIT=$?
 """)
 
     # audio: slices cut + optional cleanup -> voice.m4a ; mux.sh joins
-    # Audio processing filters: none, loudnorm EBU R128 (-16 LUFS), or voice (EQ + denoise + loudnorm)
     # Audio processing filters: none, loudnorm EBU R128 (-16 LUFS), or voice (EQ + denoise + loudnorm)
     CLEAN = {"none": "",
              "loudnorm": "loudnorm=I=-16:TP=-1.5:LRA=11",
