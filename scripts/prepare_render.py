@@ -11,6 +11,7 @@ Key invariants baked in (learned the hard way):
   * Display captures are VFR -> the chain ALWAYS starts fps=<fps>,setpts=PTS-STARTPTS
     before zoompan, else video drifts ahead of audio proportionally to dropped frames.
   * Stream synchronization: PTS-STARTPTS zero-bases timestamps to prevent progressive audio drift.
+  * Stream synchronization: PTS-STARTPTS zero-bases timestamps to prevent progressive audio drift.
   * zoompan (not crop) is used for animated zoom; its clock is output frame index: t=(on/fps).
   * Cursor layer (if enabled) is overlaid AFTER the fps fix and BEFORE zoompan so it
     rides zoom/pan exactly like Screen Studio.
