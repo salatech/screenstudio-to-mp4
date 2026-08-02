@@ -2,7 +2,8 @@
 """web_gui.py: Web-based Desktop Interface for screenstudio-to-mp4.
 
 Bypasses legacy Apple Tcl/Tk version crashes by providing a modern Web UI
-with native macOS osascript file dialogs and real-time progress updates.
+with native macOS osascript file dialogs, drag-and-drop file support,
+and real-time progress updates.
 """
 
 import os
@@ -51,18 +52,18 @@ global_tracker = ProgressTracker()
 
 
 def run_mac_file_dialog(prompt: str, is_folder: bool = True) -> str:
-    """Use native macOS osascript for crash-proof file/folder selection."""
+    """Use native macOS osascript with explicit frontmost window activation."""
     if is_folder:
-        script = f'posix path of (choose folder with prompt "{prompt}")'
+        script = f'tell application "System Events"\nactivate\nset f to choose folder with prompt "{prompt}"\nreturn posix path of f\nend tell'
     else:
-        script = f'posix path of (choose file name with prompt "{prompt}" default name "export.mp4")'
+        script = f'tell application "System Events"\nactivate\nset f to choose file name with prompt "{prompt}" default name "export.mp4"\nreturn posix path of f\nend tell'
 
     try:
-        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+        res = subprocess.run(["osascript", "-e", script], capture_output=True, text=True, timeout=120)
         if res.returncode == 0:
             return res.stdout.strip()
-    except Exception:
-        pass
+    except Exception as e:
+        print("osascript execution error:", e)
     return ""
 
 
@@ -112,6 +113,21 @@ HTML_CONTENT = """<!DOCTYPE html>
       padding: 20px;
       margin-bottom: 16px;
       box-shadow: 0 4px 20px rgba(0,0,0,0.25);
+    }
+    .drop-zone {
+      border: 2px dashed #45475a;
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      color: var(--subtext);
+      margin-bottom: 14px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .drop-zone:hover, .drop-zone.dragover {
+      border-color: var(--accent);
+      background: rgba(137, 180, 250, 0.05);
+      color: var(--text);
     }
     .field {
       margin-bottom: 14px;
@@ -209,8 +225,12 @@ HTML_CONTENT = """<!DOCTYPE html>
     <p class="subtitle">Export macOS Screen Studio recordings to MP4 — free, offline, no subscription.</p>
 
     <div class="card">
+      <div class="drop-zone" id="dropZone" ondragover="event.preventDefault(); this.classList.add('dragover');" ondragleave="this.classList.remove('dragover');" ondrop="handleDrop(event)">
+        📥 Drag & Drop your .screenstudio file/folder here, or click Browse below
+      </div>
+
       <div class="field">
-        <label>📁 Select .screenstudio Recording Package:</label>
+        <label>📁 .screenstudio Recording Package Path:</label>
         <div class="input-row">
           <input type="text" id="bundlePath" placeholder="/Users/.../Recording.screenstudio">
           <button onclick="browseBundle()">Browse...</button>
@@ -263,7 +283,22 @@ HTML_CONTENT = """<!DOCTYPE html>
   </div>
 
   <script>
+    function handleDrop(e) {
+      e.preventDefault();
+      document.getElementById('dropZone').classList.remove('dragover');
+      if (e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        const path = file.path || file.name;
+        document.getElementById('bundlePath').value = path;
+        if (!document.getElementById('outputPath').value) {
+          const name = path.split('/').pop().replace('.screenstudio', '') + '.mp4';
+          document.getElementById('outputPath').value = `/Users/solahudeen/Downloads/${name}`;
+        }
+      }
+    }
+
     async function browseBundle() {
+      document.getElementById('statusMsg').innerText = "Opening Finder folder picker...";
       const res = await fetch('/api/browse-bundle', { method: 'POST' });
       const data = await res.json();
       if (data.path) {
@@ -272,6 +307,9 @@ HTML_CONTENT = """<!DOCTYPE html>
           const name = data.path.split('/').pop().replace('.screenstudio', '') + '.mp4';
           document.getElementById('outputPath').value = `/Users/solahudeen/Downloads/${name}`;
         }
+        document.getElementById('statusMsg').innerText = "Selected bundle: " + data.path;
+      } else {
+        document.getElementById('statusMsg').innerText = "Ready for export.";
       }
     }
 
