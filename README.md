@@ -70,25 +70,7 @@ cd screenstudio-to-mp4
 
 ## Quick Start Guide
 
-### Option 1: Desktop Application (Graphical Interface & Zero Terminal Setup)
-
-Launch the modern dark-themed Desktop App:
-
-```bash
-python3 gui.py
-```
-
-1. Select your `.screenstudio` bundle file.
-2. Choose your output destination and optional background image.
-3. Click **🚀 Export to MP4**!
-
-> [!TIP]
-> **Build a standalone macOS `.app` or `.dmg` installer:**
-> Run `python3 build_app.py` to compile a zero-dependency macOS application with embedded `ffmpeg` binaries!
-
----
-
-### Option 2: Fast Raw Video Export (Seconds)
+### Option 1: Fast Raw Video Export (Seconds)
 
 If you only need the raw recording with microphone audio (without cursor, zooms, or background frames):
 
