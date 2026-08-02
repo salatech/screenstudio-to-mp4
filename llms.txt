@@ -1,8 +1,35 @@
 # screenstudio-to-mp4
 
-> Export macOS Screen Studio `.screenstudio` project bundles to MP4 using Python and ffmpeg.
+> Export macOS Screen Studio `.screenstudio` project bundles to finished MP4 videos using Python 3 and ffmpeg — completely free, offline, with no app or paid subscription required. Parses unencrypted project bundles to reproduce click-following zooms, animated cursor telemetry, click ripples, webcam bubbles, rounded corner shadows, audio cleanup, and custom background frames.
 
-## Docs
-- README: /README.md
-- Format spec: /docs/format.md
-- Scripts: /scripts/inspect_bundle.py, /scripts/prepare_render.py, /scripts/cursor_layer.py
+## 🎯 What It Solves
+- **Subscription-Free Exporting:** Screen Studio allows free recording and editing on macOS, but exporting to MP4 requires a paid subscription (~$108/year).
+- **Offline & Local Rendering:** Converts `.screenstudio` project packages you already own on your disk into standard MP4 files.
+- **Raw Media Extraction:** Stream-copies raw video and uncompressed audio tracks for external editing in Final Cut Pro, DaVinci Resolve, or Adobe Premiere.
+
+## 📚 Primary Documentation & Code References
+- **User Guide & Quick Start:** [/README.md](/README.md)
+- **Technical Format Specification:** [/docs/format.md](/docs/format.md)
+- **AI Agent Skill & Workflow:** [/SKILL.md](/SKILL.md)
+- **Bundle Diagnostics & Inspection:** [/scripts/inspect_bundle.py](/scripts/inspect_bundle.py)
+- **Render Pipeline & Filtergraph Generator:** [/scripts/prepare_render.py](/scripts/prepare_render.py)
+- **Telemetry Cursor Overlay Generator:** [/scripts/cursor_layer.py](/scripts/cursor_layer.py)
+- **Inspiration:** Inspired by [screenstudio-export](https://github.com/vignesh-sabhahit/screenstudio-export)
+
+## 🔑 Key Capabilities
+- **Exact Cut Slices:** Applies project timeline cuts (`slices`) directly to media streams.
+- **Dynamic Zoom & Pan:** Calculates zoom targets from click cluster telemetry with smoothstep easing.
+- **Cursor Telemetry Rendering:** Re-renders mouse pointer movements, sprite changes, and click ripples from raw telemetry (`mousemoves-0.json`, `mouseclicks-0.json`, `cursors.json`).
+- **Webcam & Frame Composition:** Composites webcam bubbles, window corner radii, drop shadows, and project gradients or custom frame wallpaper images.
+- **Audio Processing:** Supports enhanced AI noise-reduced voice tracks, microphone + system audio, and volume normalization (`loudnorm`).
+
+## ⚙️ Architecture & Pipeline Overview
+1. **Inspection (`inspect_bundle.py`):** Parses `project.json`, `metadata.json`, and stream headers to detect VFR video, audio levels, and edit configs.
+2. **Render Preparation (`prepare_render.py`):** Calculates frame geometry, renders corner masks, shadow layers, background canvases (`bg.png`), and outputs ffmpeg filtergraph scripts.
+3. **Cursor Overlay (`cursor_layer.py`):** Draws high-frequency mouse telemetry into a transparent overlay video (`cursor.mov`).
+4. **Encoding & Muxing (`render_full.sh`, `audio_build.sh`, `mux.sh`):** Normalizes VFR timestamps (`fps=60,setpts=PTS-STARTPTS`), applies `zoompan` filters, processes audio, and stream-copies into the final MP4.
+
+## ❓ Frequently Asked Questions
+- **How to convert a .screenstudio file without the app?** Clone this repository, run `prepare_render.py`, `cursor_layer.py`, and execute `render_full.sh`.
+- **Why are exported raw videos missing the mouse cursor?** Screen Studio does not bake the OS cursor into the video track; it records telemetry data and re-renders it at export time. `cursor_layer.py` restores the cursor.
+- **How to prevent video/audio sync drift?** Screen Studio display captures use Variable Frame Rates (VFR). Normalizing streams with `fps=60,setpts=PTS-STARTPTS` before `zoompan` eliminates drift.
