@@ -13,9 +13,7 @@ import tempfile
 import threading
 from pathlib import Path
 
-# Add scripts directory to path for module imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "scripts"))
-
 try:
     import inspect_bundle
     import prepare_render

@@ -3,6 +3,7 @@
 
 import os
 import sys
+import shutil
 import threading
 import subprocess
 import tkinter as tk
@@ -249,9 +250,17 @@ class ScreenStudioApp(tk.Tk):
 
 
 def main():
-    app = ScreenStudioApp()
-    app.mainloop()
+    try:
+        app = ScreenStudioApp()
+        app.mainloop()
+    except Exception as e:
+        print(f"⚠️ Native Tkinter UI unavailable ({e}). Falling back to Web Desktop Interface...")
+        from web_gui import launch_web_gui
+        launch_web_gui()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (KeyboardInterrupt, SystemExit):
+        pass
