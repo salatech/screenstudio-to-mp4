@@ -349,6 +349,7 @@ echo PREVIEW_EXIT=$?
 
     # audio: slices cut + optional cleanup -> voice.m4a ; mux.sh joins
     # Audio processing filters: none, loudnorm EBU R128 (-16 LUFS), or voice (EQ + denoise + loudnorm)
+    # Audio processing filters: none, loudnorm EBU R128 (-16 LUFS), or voice (EQ + denoise + loudnorm)
     CLEAN = {"none": "",
              "loudnorm": "loudnorm=I=-16:TP=-1.5:LRA=11",
              "voice": ("highpass=f=80,equalizer=f=130:t=q:w=1.1:g=-5,"
