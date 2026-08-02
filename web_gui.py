@@ -210,7 +210,6 @@ HTML_CONTENT = """<!DOCTYPE html>
 <body>
   <!-- Hidden Native File Inputs -->
   <input type="file" id="nativeFilePicker" style="display:none" onchange="onNativeFileSelected(event)">
-  <input type="file" id="nativeFolderPicker" style="display:none" webkitdirectory directory onchange="onNativeFolderSelected(event)">
   <input type="file" id="nativeFramePicker" style="display:none" accept="image/*" onchange="onNativeFrameSelected(event)">
 
   <div class="container">
@@ -219,19 +218,18 @@ HTML_CONTENT = """<!DOCTYPE html>
 
     <div class="card">
       <div class="drop-zone" id="dropZone" 
-           onclick="document.getElementById('nativeFolderPicker').click()"
+           onclick="document.getElementById('nativeFilePicker').click()"
            ondragover="event.preventDefault(); this.classList.add('dragover');" 
            ondragleave="this.classList.remove('dragover');" 
            ondrop="handleDrop(event)">
-        📥 Drag & Drop your .screenstudio file/folder here, or click to choose
+        📥 Drag & Drop your .screenstudio file here, or click to choose
       </div>
 
       <div class="field">
         <label>📁 .screenstudio Recording Package Path:</label>
         <div class="input-row">
           <input type="text" id="bundlePath" placeholder="/Users/.../Recording.screenstudio">
-          <button class="btn-browse" onclick="document.getElementById('nativeFolderPicker').click()">Browse Folder...</button>
-          <button class="btn-browse" onclick="document.getElementById('nativeFilePicker').click()">Browse File...</button>
+          <button class="btn-browse" onclick="document.getElementById('nativeFilePicker').click()">Browse...</button>
         </div>
       </div>
 
