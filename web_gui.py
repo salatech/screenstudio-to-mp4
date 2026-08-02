@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """web_gui.py: Web-based Desktop Interface for screenstudio-to-mp4.
 
-Uses native HTML5 file inputs and drag-and-drop to open file selection dialogs
-directly in your web browser with zero osascript or Tcl/Tk permissions issues.
+Features automatic system bundle scanning, smart path resolution, native HTML5
+file pickers, drag-and-drop, and real-time export progress tracking.
 """
 
 import os
@@ -48,6 +48,57 @@ class ProgressTracker:
 
 
 global_tracker = ProgressTracker()
+
+
+def scan_system_bundles() -> list:
+    """Scan common macOS directories for .screenstudio project packages."""
+    home = os.path.expanduser("~")
+    search_dirs = [
+        os.path.join(home, "Desktop"),
+        os.path.join(home, "Downloads"),
+        os.path.join(home, "Movies"),
+        os.path.join(home, "Documents"),
+        os.path.join(home, "Movies", "Screen Studio"),
+        home
+    ]
+    found = []
+    for d in search_dirs:
+        if not os.path.exists(d):
+            continue
+        try:
+            for item in os.listdir(d):
+                if item.endswith(".screenstudio"):
+                    full_path = os.path.join(d, item)
+                    if os.path.isdir(full_path):
+                        found.append(full_path)
+        except Exception:
+            pass
+    return sorted(list(set(found)))
+
+
+def resolve_bundle_path(input_path: str) -> str:
+    """Resolve relative file/folder names or webkit paths to absolute POSIX paths."""
+    if not input_path:
+        return ""
+
+    input_path = input_path.strip().strip('"').strip("'")
+    if os.path.isabs(input_path) and os.path.exists(input_path):
+        return input_path
+
+    filename = os.path.basename(input_path)
+    # Check scanned bundles for exact match
+    for bundle in scan_system_bundles():
+        if os.path.basename(bundle) == filename or bundle.endswith(input_path):
+            return bundle
+
+    # Search in common user folders
+    home = os.path.expanduser("~")
+    for parent in [home, os.path.join(home, "Desktop"), os.path.join(home, "Downloads"), os.path.join(home, "Movies"), os.path.join(home, "Documents")]:
+        cand = os.path.join(parent, filename)
+        if os.path.exists(cand):
+            return cand
+
+    return input_path
 
 
 HTML_CONTENT = """<!DOCTYPE html>
@@ -207,8 +258,8 @@ HTML_CONTENT = """<!DOCTYPE html>
     }
   </style>
 </head>
-<body>
-  <!-- Hidden Native File Inputs -->
+<body onload="initApp()">
+  <!-- Hidden Native File Pickers -->
   <input type="file" id="nativeFilePicker" style="display:none" onchange="onNativeFileSelected(event)">
   <input type="file" id="nativeFramePicker" style="display:none" accept="image/*" onchange="onNativeFrameSelected(event)">
 
@@ -217,6 +268,14 @@ HTML_CONTENT = """<!DOCTYPE html>
     <p class="subtitle">Export macOS Screen Studio recordings to MP4 — free, offline, no subscription.</p>
 
     <div class="card">
+      <!-- Quick Scan Selector -->
+      <div class="field" id="scanSection" style="display:none;">
+        <label>✨ Found Recordings on your Mac:</label>
+        <select id="scannedSelect" onchange="onScannedSelected(this.value)">
+          <option value="">-- Choose a detected .screenstudio recording --</option>
+        </select>
+      </div>
+
       <div class="drop-zone" id="dropZone" 
            onclick="document.getElementById('nativeFilePicker').click()"
            ondragover="event.preventDefault(); this.classList.add('dragover');" 
@@ -228,7 +287,7 @@ HTML_CONTENT = """<!DOCTYPE html>
       <div class="field">
         <label>📁 .screenstudio Recording Package Path:</label>
         <div class="input-row">
-          <input type="text" id="bundlePath" placeholder="/Users/.../Recording.screenstudio">
+          <input type="text" id="bundlePath" placeholder="/Users/.../Recording.screenstudio" onchange="resolvePath(this.value)">
           <button class="btn-browse" onclick="document.getElementById('nativeFilePicker').click()">Browse...</button>
         </div>
       </div>
@@ -278,30 +337,41 @@ HTML_CONTENT = """<!DOCTYPE html>
   </div>
 
   <script>
+    async function initApp() {
+      // Scan for recordings on page load
+      const res = await fetch('/api/scan-bundles');
+      const data = await res.json();
+      if (data.bundles && data.bundles.length > 0) {
+        const select = document.getElementById('scannedSelect');
+        data.bundles.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b;
+          opt.innerText = b.split('/').pop() + ` (${b})`;
+          select.appendChild(opt);
+        });
+        document.getElementById('scanSection').style.display = 'block';
+      }
+    }
+
+    function onScannedSelected(path) {
+      if (path) setBundlePath(path);
+    }
+
     function handleDrop(e) {
       e.preventDefault();
       document.getElementById('dropZone').classList.remove('dragover');
       if (e.dataTransfer.files.length > 0) {
         const file = e.dataTransfer.files[0];
-        const path = file.path || file.name;
-        setBundlePath(path);
-      }
-    }
-
-    function onNativeFolderSelected(e) {
-      if (e.target.files.length > 0) {
-        const file = e.target.files[0];
-        // Relative path inside folder package (e.g. MyRecording.screenstudio/meta.json)
-        const rel = file.webkitRelativePath || file.name;
-        const folderName = rel.split('/')[0];
-        setBundlePath(file.path || folderName);
+        const raw = file.path || file.name;
+        resolvePath(raw);
       }
     }
 
     function onNativeFileSelected(e) {
       if (e.target.files.length > 0) {
         const file = e.target.files[0];
-        setBundlePath(file.path || file.name);
+        const raw = file.path || file.name;
+        resolvePath(raw);
       }
     }
 
@@ -309,6 +379,21 @@ HTML_CONTENT = """<!DOCTYPE html>
       if (e.target.files.length > 0) {
         const file = e.target.files[0];
         document.getElementById('framePath').value = file.path || file.name;
+      }
+    }
+
+    async function resolvePath(raw) {
+      if (!raw) return;
+      const res = await fetch('/api/resolve-path', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: raw })
+      });
+      const data = await res.json();
+      if (data.resolved) {
+        setBundlePath(data.resolved);
+      } else {
+        setBundlePath(raw);
       }
     }
 
@@ -384,12 +469,11 @@ class WebGUIRequestHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(HTML_CONTENT.encode("utf-8"))
+        elif self.path == "/api/scan-bundles":
+            bundles = scan_system_bundles()
+            self._send_json({"bundles": bundles})
         elif self.path == "/api/status":
-            self.send_response(200)
-            self.send_header("Content-Type", "application/json")
-            self.end_headers()
-            state = global_tracker.get_state()
-            self.wfile.write(json.dumps(state).encode("utf-8"))
+            self._send_json(global_tracker.get_state())
         else:
             self.send_error(404)
 
@@ -397,9 +481,15 @@ class WebGUIRequestHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get('Content-Length', 0))
         body_bytes = self.rfile.read(length) if length > 0 else b""
 
-        if self.path == "/api/export":
+        if self.path == "/api/resolve-path":
             data = json.loads(body_bytes.decode("utf-8"))
-            bundle = data.get("bundle")
+            raw = data.get("path", "")
+            resolved = resolve_bundle_path(raw)
+            self._send_json({"resolved": resolved})
+
+        elif self.path == "/api/export":
+            data = json.loads(body_bytes.decode("utf-8"))
+            bundle = resolve_bundle_path(data.get("bundle"))
             output = data.get("output")
             options = {
                 "frame": data.get("frame") or None,
