@@ -6,3 +6,7 @@ work/
 *.mp4
 *.png
 !docs/**
+build/
+build_assets/
+dist/
+*.spec
