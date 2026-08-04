@@ -70,7 +70,34 @@ cd screenstudio-to-mp4
 
 ## Quick Start Guide
 
-### Option 1: Fast Raw Video Export (Seconds)
+### Option 0: macOS App (easiest — no coding)
+
+1. Build once (for you / maintainers):
+   ```bash
+   brew install ffmpeg
+   pip3 install pillow pyinstaller
+   python3 build_app.py
+   ```
+2. Open `dist/screenstudio-to-mp4.dmg`
+3. Drag **screenstudio-to-mp4** into **Applications**
+4. Double-click the app — your browser opens the exporter
+
+> First open on a new Mac: right-click the app → **Open** (macOS Gatekeeper).
+
+---
+
+### Option 1: Easy Web GUI (from source)
+
+```bash
+cd screenstudio-to-mp4
+python3 web_gui.py
+```
+
+This opens a local page in your browser (`http://127.0.0.1:8600`). Pick a recording, click **Export to MP4**, and wait for the progress bar. Nothing is uploaded — everything stays on your Mac.
+
+---
+
+### Option 2: Fast Raw Video Export (Seconds)
 
 If you only need the raw recording with microphone audio (without cursor, zooms, or background frames):
 
@@ -82,7 +109,7 @@ ffmpeg -i ~/path/to/YourRecording.screenstudio/recording/channel-2-display-0.m3u
 
 ---
 
-### Option 2: Full Effect Export (Recommended)
+### Option 3: Full Effect Export (from source / CLI)
 
 Copy and run the script block below. Simply update `BUNDLE` and `OUTPUT` to your local file paths:
 
@@ -304,6 +331,9 @@ MyProject.screenstudio/
 screenstudio-to-mp4/
 ├── README.md                  # Project documentation
 ├── LICENSE                    # MIT License
+├── web_gui.py                 # Browser-based exporter GUI
+├── exporter.py                # Shared export pipeline
+├── build_app.py               # Build macOS .app + .dmg
 ├── SKILL.md                   # Agent skill instructions
 ├── llms.txt                   # LLM context reference
 ├── docs/
