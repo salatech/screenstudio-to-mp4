@@ -17,6 +17,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from urllib.parse import urlparse
 
 from exporter import RenderExporter, check_dependencies, app_root
+from render_lib import clean_path  # scripts/ is on sys.path via exporter
 
 HOME = os.path.expanduser("~")
 DEFAULT_PORT = 8600
@@ -105,8 +106,8 @@ def resolve_bundle_path(input_path: str) -> str:
     """Map a filename or partial path to an absolute .screenstudio bundle."""
     if not input_path:
         return ""
-    raw = input_path.strip().strip('"').strip("'")
-    expanded = os.path.abspath(os.path.expanduser(raw))
+    raw = clean_path(input_path)
+    expanded = raw
     if os.path.isdir(expanded) and expanded.endswith(".screenstudio"):
         return expanded
     # If user picked a file inside the package, walk up
@@ -696,8 +697,8 @@ HTML = r"""<!DOCTYPE html>
               </div>
             </div>
             <div class="field">
-              <label class="lbl">Screen size: <span id="scaleVal">78%</span></label>
-              <input type="range" id="screenFrac" min="50" max="98" step="2" value="78">
+              <label class="lbl">Screen size: <span id="scaleVal">project</span></label>
+              <input type="range" id="screenFrac" min="50" max="98" step="2" value="80" data-auto="1">
             </div>
           </div>
         </div>
@@ -898,6 +899,7 @@ HTML = r"""<!DOCTYPE html>
   });
 
   document.getElementById("screenFrac").addEventListener("input", e => {
+    e.target.dataset.auto = "0";
     document.getElementById("scaleVal").textContent = e.target.value + "%";
   });
 
@@ -997,7 +999,9 @@ HTML = r"""<!DOCTYPE html>
         output,
         frame: useBg ? document.getElementById("framePath").value.trim() : "",
         screen_frac: useBg
-          ? parseInt(document.getElementById("screenFrac").value, 10) / 100
+          ? (document.getElementById("screenFrac").dataset.auto === "1"
+              ? null
+              : parseInt(document.getElementById("screenFrac").value, 10) / 100)
           : 1.0,
         audio_cleanup: getCSelectValue("audioCleanup"),
         zooms: document.getElementById("fxZooms").checked ? "on" : "off",
@@ -1093,13 +1097,16 @@ class Handler(BaseHTTPRequestHandler):
             output = os.path.abspath(os.path.expanduser(data.get("output", "")))
             options = {
                 "frame": data.get("frame") or None,
-                "screen_frac": float(data.get("screen_frac", 0.78)),
                 "audio_cleanup": data.get("audio_cleanup", "loudnorm"),
                 "zooms": data.get("zooms", "on"),
                 "cursor": data.get("cursor", "auto"),
                 "webcam": data.get("webcam", "auto"),
                 "preset": data.get("preset", "slow"),
             }
+            if data.get("screen_frac") is not None:
+                options["screen_frac"] = float(data["screen_frac"])
+            if data.get("out_width") is not None:
+                options["out_width"] = int(data["out_width"])
 
             tracker.reset()
             tracker.set_output(output)
