@@ -4,6 +4,7 @@
 Usage: python3 inspect_bundle.py /path/to/Project.screenstudio
 """
 import json, os, subprocess, sys
+from render_lib import clean_path, find_captions, find_system_wallpaper, output_duration, parse_slices
 
 FFPROBE = "ffprobe"
 FFMPEG = "ffmpeg"
@@ -23,6 +24,7 @@ def probe(path, entries="stream=codec_name,codec_type,width,height,r_frame_rate,
 
 
 def main(bundle):
+    bundle = clean_path(bundle)
     rec = os.path.join(bundle, "recording")
     warnings = []
 
@@ -35,7 +37,7 @@ def main(bundle):
     print(f"screen studio version: {meta_app['json'].get('version')}")
     print(f"scenes: {len(proj['scenes'])}")
     if len(proj["scenes"]) > 1:
-        warnings.append("MULTIPLE SCENES: this pipeline renders scenes[0] only.")
+        warnings.append(f"MULTIPLE SCENES: slices from all {len(proj['scenes'])} scenes are concatenated.")
     scene = proj["scenes"][0]
 
     # --- channels ---
@@ -110,23 +112,39 @@ def main(bundle):
               "cameraRoundness", "hideCamera", "hideCursor", "cursorSize", "clickEffect",
               "showTranscript", "recordingCrop", "muteMicrophone", "muteSystemAudio"):
         print(f"  {k} = {cfg.get(k)}")
-    if cfg.get("backgroundType") == "system":
-        warnings.append("background is a macOS system wallpaper NOT shipped in the bundle; "
-                        "use --frame <image> or fall back to the project gradient.")
-    if cfg.get("showTranscript"):
-        warnings.append("showTranscript=true but bundle has no transcript; captions cannot be rendered.")
+    if cfg.get("backgroundType") == "system" or cfg.get("backgroundSystemName"):
+        wallpaper = find_system_wallpaper(cfg.get("backgroundSystemName"))
+        if wallpaper:
+            warnings.append(f"Screen Studio wallpaper: {cfg.get('backgroundSystemName')} -> {wallpaper}")
+        else:
+            warnings.append("Screen Studio wallpaper not found (install Screen Studio.app "
+                            "or pass --frame <image>).")
+    caps = find_captions(bundle)
+    if caps:
+        warnings.append(f"captions file found: {caps} (will be burned in)")
+    elif cfg.get("showTranscript"):
+        warnings.append("showTranscript=true but bundle has no .srt/.vtt; captions skipped.")
     crop = cfg.get("recordingCrop") or {}
     if crop and (crop.get("x"), crop.get("y"), crop.get("width"), crop.get("height")) != (0, 0, 1, 1):
         warnings.append(f"recordingCrop={crop}: display must be cropped; cursor overlay offset accordingly.")
 
     # --- scene ---
-    slices = scene.get("slices", [])
-    zooms = [z for z in scene.get("zoomRanges", []) if not z.get("isDisabled")]
+    raw_slices = []
+    for sc in proj["scenes"]:
+        raw_slices.extend(sc.get("slices") or [])
+    slices = raw_slices
+    slc = parse_slices(slices, 0)
+    zooms = []
+    for sc in proj["scenes"]:
+        zooms.extend(z for z in sc.get("zoomRanges", []) if not z.get("isDisabled"))
     print(f"\n=== scene ===\n  slices: {len(slices)}")
     for s in slices:
         print(f"    {s['sourceStartMs']/1000:.2f}s -> {s['sourceEndMs']/1000:.2f}s  timeScale={s.get('timeScale',1)}")
-        if s.get("timeScale", 1) != 1:
-            warnings.append(f"slice {s.get('id')} timeScale={s['timeScale']}: speed ramps NOT implemented (treated as 1.0).")
+    if any(abs(s.time_scale - 1.0) > 1e-6 for s in slc):
+        warnings.append(
+            f"speed edits (timeScale=1/speed): output {output_duration(slc):.1f}s "
+            f"(follows the Screen Studio timeline, not raw source length)."
+        )
     print(f"  zoomRanges (enabled): {len(zooms)}")
     for z in zooms[:20]:
         print(f"    {z['startTime']/1000:.2f}-{z['endTime']/1000:.2f}s zoom={z['zoom']} type={z['type']}")
@@ -152,4 +170,4 @@ def main(bundle):
 if __name__ == "__main__":
     if len(sys.argv) != 2:
         sys.exit(__doc__)
-    main(sys.argv[1].rstrip("/"))
+    main(sys.argv[1])
