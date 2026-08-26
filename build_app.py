@@ -100,6 +100,7 @@ def build_app(ffmpeg: Path, ffprobe: Path) -> Path:
         "--hidden-import=inspect_bundle",
         "--hidden-import=prepare_render",
         "--hidden-import=cursor_layer",
+        "--hidden-import=render_lib",
         f"--workpath={BUILD}",
         f"--distpath={DIST}",
         f"--specpath={BUILD}",
