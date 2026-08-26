@@ -21,6 +21,7 @@ Usage:
 """
 import argparse, json, math, os, subprocess, sys
 from PIL import Image, ImageDraw
+from render_lib import clean_path
 
 RIPPLE_DUR, RIPPLE_R0, RIPPLE_DR = 0.45, 8.0, 37.0
 RIPPLE_STROKE, RIPPLE_A0 = 3.0, 0.35
@@ -40,10 +41,11 @@ def main():
                     help="debug: render these frame indices as PNGs instead")
     a = ap.parse_args()
 
-    bundle = a.bundle.rstrip("/")
+    bundle = clean_path(a.bundle)
     rec = os.path.join(bundle, "recording")
-    out = a.out or os.path.join(a.work, "cursor_layer.mov")
-    os.makedirs(a.work, exist_ok=True)
+    work = clean_path(a.work)
+    out = a.out or os.path.join(work, "cursor_layer.mov")
+    os.makedirs(work, exist_ok=True)
 
     proj = json.load(open(os.path.join(bundle, "project.json")))["json"]
     meta = json.load(open(os.path.join(rec, "metadata.json")))
@@ -92,7 +94,7 @@ def main():
     downs = sorted((t(e["processTimeMs"]), float(e["x"]), float(e["y"]))
                    for e in mc if e.get("type") == "mouseDown")
     if not moves:
-        sys.exit("no mouse move data")
+        raise RuntimeError("no mouse move data")
 
     # per-frame positions: lerp within gaps<=HOLD_GAP; hold+tail-lerp across longer gaps; EMA
     ts = [m[0] for m in moves]; xs = [m[1] for m in moves]; ys = [m[2] for m in moves]
@@ -205,7 +207,8 @@ def main():
         proc.stdin.close()
     rc = proc.wait()
     print(f"done: {out} frames={NF} fps={FPS} canvas={W}x{H}pt exit={rc}")
-    sys.exit(rc)
+    if rc:
+        raise RuntimeError(f"cursor layer ffmpeg exited {rc}")
 
 
 if __name__ == "__main__":
