@@ -17,7 +17,7 @@
 - **Inspiration:** Inspired by [screenstudio-export](https://github.com/vignesh-sabhahit/screenstudio-export)
 
 ## 🔑 Key Capabilities
-- **Exact Cut Slices:** Applies project timeline cuts (`slices`) directly to media streams.
+- **Exact Cut Slices & Speed:** Applies project timeline cuts and `timeScale` (1/speed — collapse/fast-forward or slow-mo) to video and audio.
 - **Dynamic Zoom & Pan:** Calculates zoom targets from click cluster telemetry with smoothstep easing.
 - **Cursor Telemetry Rendering:** Re-renders mouse pointer movements, sprite changes, and click ripples from raw telemetry (`mousemoves-0.json`, `mouseclicks-0.json`, `cursors.json`).
 - **Webcam & Frame Composition:** Composites webcam bubbles, window corner radii, drop shadows, and project gradients or custom frame wallpaper images.

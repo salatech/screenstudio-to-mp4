@@ -50,13 +50,15 @@ All flags are passed to `scripts/prepare_render.py`:
 | **Frame Image** | `--frame IMG` | *None* | Custom background image (cover-cropped to canvas) |
 | **Frame Blur** | `--frame-blur` | `2.0` | Background blur ($\sigma$); `0` = sharp, `6–8` = heavy blur |
 | `--frame-darken` | `--frame-darken` | `0.03` | Darkening factor for screen contrast |
-| **Output Width** | `--out-width` | `1920` | Output width in pixels (height follows aspect ratio) |
-| **Screen Size** | `--screen-frac` | `0.78` | Screen width relative to canvas (`1.0` = edge-to-edge / no border) |
+| **Output Width** | `--out-width` | `0` (recording size) | Output width in pixels; `0` matches the capture |
+| **Screen Size** | `--screen-frac` | project padding | Screen width relative to canvas (`1.0` = edge-to-edge). Default uses `backgroundPaddingRatio` |
 | **Webcam** | `--webcam` | `auto` | Visibility: `auto` (reads project `hideCamera`), `on`, or `off` |
 | **Zooms** | `--zooms` | `on` | Enable/disable click-following zoom effects |
 | **Cursor** | `--cursor` | `auto` | Animated pointer overlay (`auto`, `on`, or `off`) |
 | **Quality** | `--crf` / `--preset` | `18` / `slow` | x264 quality level and encoding preset |
-| **Audio Track** | `--audio` | `auto` | `auto` (uses enhanced voice if present, else mic), `mic`, `mic+system` |
+| **Captions** | `--captions PATH` | *auto* | Burn in `.srt`/`.vtt` (also auto-detected in the bundle) |
+| **Motion blur** | `--motion-blur` | `auto` | `auto` (from project), `on`, or `off` |
+| **Audio Track** | `--audio` | `auto` | `auto` (enhanced → mic → system → silence), `mic`, `enhanced`, `system`, `mic+system`, `silence` |
 | **Audio Cleanup** | `--audio-cleanup` | `loudnorm` | `none`, `loudnorm` (normalize level), or `voice` (EQ + denoise) |
 
 ---
@@ -120,13 +122,14 @@ zsh work/render_full.sh && zsh work/audio_build.sh && zsh work/mux.sh
 2. **`crop` Cannot Animate Zooms:** `crop` parameters evaluate only once at init. Use `zoompan` for per-frame dynamic zooming.
 3. **Cursor Overlay Order:** Composite the cursor onto the display stream *after* frame-rate normalization but *before* `zoompan` so it zooms naturally with the screen content.
 4. **Point vs Pixel Scaling:** Mouse coordinates are recorded in logical display **points**. Scale cursor overlays by $\text{display\_px} / \text{bounds\_pt}$ (typically $2.0$).
-5. **Missing Wallpapers:** Project settings with `backgroundType: "system"` refer to macOS wallpapers not stored in the bundle directory. Fall back to project gradient or pass `--frame`.
+5. **Screen Studio wallpapers:** `backgroundSystemName` (e.g. `macOS/tahoe-light.jpg`) lives inside `Screen Studio.app` (`app.asar` → `assets/backgrounds/…`). The pipeline extracts and caches it. If the app is not installed, it falls back to the project gradient. Pass `--frame` to override.
 6. **Even Dimension Constraints:** x264 requires even dimensions for all geometry streams (`yuv420p` format).
+7. **Quoted paths:** Always quote paths. Never write `h30\\.screenstudio` inside quotes — ffmpeg will look for a file that does not exist.
+8. **No `split=N` for edits:** Apply cuts and speed ramps with `select`/`setpts` after compositing. A 61-way `split` OOMs or looks frozen.
 
 ---
 
 ## 📢 Known Limitations to Disclose to Users
 
 - **Zoom Easing:** Uses smoothstep interpolation (approximates Screen Studio's damped spring without overshoot).
-- **Speed Ramps (`timeScale` ≠ 1):** Currently skipped (warning displayed during inspection).
-- **Captions:** Subtitles are rendered at export time by the app and are not present in `.screenstudio` bundles.
+- **Captions:** Only burned in when a `.srt`/`.vtt` is in the bundle or passed with `--captions`.

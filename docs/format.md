@@ -87,15 +87,18 @@ Contains an array of kept video spans:
 ```json
 [
   { "sourceStartMs": 0, "sourceEndMs": 4200, "timeScale": 1.0 },
+  { "sourceStartMs": 4200, "sourceEndMs": 5800, "timeScale": 0.125 },
   { "sourceStartMs": 5800, "sourceEndMs": 12500, "timeScale": 1.0 }
 ]
 ```
 
+`timeScale` is **1 / playback speed**. `0.125` means 8× faster (collapsed). Output duration of a slice is `(sourceEnd − sourceStart) * timeScale`. The renderer remaps video with `setpts` and audio with chained `atempo` filters (each hop stays in ffmpeg's `[0.5, 100]` range). Removed source ranges (cuts) are omitted from `slices`.
+
 ### 2. Click Zooms (`scenes[0].zoomRanges`)
 Defines zoom animation targets across time:
 - `startTime` / `endTime`: Source timestamps (in ms).
-- `zoom`: Magnification factor (e.g. `1.5`, `2.0`).
-- `type`: `follow-click-groups` (centers on mouse click centroid) or `manual` (uses `manualTargetPoint`).
+- `zoom`: Magnification factor (e.g. `1.5`, `2.0`). The renderer never exceeds this, and for `follow-click-groups` it reduces zoom so the click bounding box plus `snapToEdgesRatio` still fits in frame.
+- `type`: `follow-click-groups` (centers on mouse-down clicks) or `manual` (uses `manualTargetPoint`).
 
 ### 3. Styling & Config (`config`)
 Contains project styling properties (~70 key-value pairs):
