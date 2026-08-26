@@ -30,6 +30,8 @@ if ROOT not in sys.path:
 if SCRIPTS not in sys.path:
     sys.path.insert(0, SCRIPTS)
 
+from render_lib import clean_path, parse_ffmpeg_progress  # noqa: E402
+
 
 def _bundled(name: str) -> Optional[str]:
     cand = os.path.join(ROOT, name)
@@ -88,6 +90,10 @@ def _call_with_argv(main_fn, argv: list[str]) -> None:
     try:
         sys.argv = argv
         main_fn()
+    except SystemExit as exc:
+        code = exc.code
+        if code not in (0, None):
+            raise RuntimeError(f"{argv[0]} exited with {code}") from exc
     finally:
         sys.argv = old
 
@@ -102,8 +108,8 @@ class RenderExporter:
         work_dir: Optional[str] = None,
         options: Optional[dict] = None,
     ):
-        self.bundle_path = os.path.abspath(os.path.expanduser(bundle_path.rstrip("/")))
-        self.output_path = os.path.abspath(os.path.expanduser(output_path))
+        self.bundle_path = clean_path(bundle_path)
+        self.output_path = clean_path(output_path)
         self.work_dir = (
             os.path.abspath(os.path.expanduser(work_dir))
             if work_dir
@@ -176,8 +182,10 @@ class RenderExporter:
                 prep.extend(["--frame", os.path.abspath(os.path.expanduser(opts["frame"]))])
             if "frame_blur" in opts:
                 prep.extend(["--frame-blur", str(opts["frame_blur"])])
-            if "screen_frac" in opts:
+            if opts.get("screen_frac") is not None:
                 prep.extend(["--screen-frac", str(opts["screen_frac"])])
+            if opts.get("out_width") is not None:
+                prep.extend(["--out-width", str(opts["out_width"])])
             if opts.get("webcam"):
                 prep.extend(["--webcam", str(opts["webcam"])])
             if opts.get("zooms"):
@@ -208,11 +216,36 @@ class RenderExporter:
                     ],
                 )
 
-            update("Rendering video (this is the longest step)…", 55.0)
-            self._run_script(os.path.join(self.work_dir, "render_full.sh"), env=env)
+            plan_path = os.path.join(self.work_dir, "plan.json")
+            out_dur = 0.0
+            try:
+                import json
+                plan = json.load(open(plan_path, encoding="utf-8"))
+                out_dur = float(plan.get("out_dur_s") or 0)
+            except Exception:
+                pass
 
-            update("Cleaning up and normalizing audio…", 85.0)
-            self._run_script(os.path.join(self.work_dir, "audio_build.sh"), env=env)
+            update("Rendering video (this is the longest step)…", 42.0)
+            self._run_script(
+                os.path.join(self.work_dir, "render_full.sh"),
+                env=env,
+                progress=update,
+                label="Rendering video",
+                pct_start=42.0,
+                pct_end=82.0,
+                duration=out_dur,
+            )
+
+            update("Building the audio track…", 84.0)
+            self._run_script(
+                os.path.join(self.work_dir, "audio_build.sh"),
+                env=env,
+                progress=update,
+                label="Building audio",
+                pct_start=84.0,
+                pct_end=93.0,
+                duration=out_dur,
+            )
 
             update("Combining video and audio into your MP4…", 95.0)
             self._run_script(os.path.join(self.work_dir, "mux.sh"), env=env)
@@ -226,7 +259,16 @@ class RenderExporter:
             update(f"Export failed: {exc}", -1.0)
             raise
 
-    def _run_script(self, script_path: str, env: dict) -> None:
+    def _run_script(
+        self,
+        script_path: str,
+        env: dict,
+        progress: Optional[ProgressCb] = None,
+        label: str = "",
+        pct_start: float = 0.0,
+        pct_end: float = 0.0,
+        duration: float = 0.0,
+    ) -> None:
         if not os.path.isfile(script_path):
             raise FileNotFoundError(f"Missing generated script:\n{script_path}")
 
@@ -239,15 +281,33 @@ class RenderExporter:
         if patched != content:
             open(script_path, "w", encoding="utf-8").write(patched)
 
-        res = subprocess.run(
+        proc = subprocess.Popen(
             ["zsh", script_path],
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             env=env,
             cwd=self.work_dir,
+            bufsize=1,
         )
-        if res.returncode != 0:
-            err = (res.stderr or res.stdout or "").strip()
+        logs: list[str] = []
+        assert proc.stdout is not None
+        for line in proc.stdout:
+            logs.append(line)
+            t = parse_ffmpeg_progress(line)
+            if t is not None and duration > 0 and progress:
+                frac = min(1.0, max(0.0, t / duration))
+                pct = pct_start + (pct_end - pct_start) * frac
+                mins, secs = divmod(int(t), 60)
+                total_m, total_s = divmod(int(duration), 60)
+                progress(
+                    f"{label}… {mins}:{secs:02d} / {total_m}:{total_s:02d}",
+                    pct,
+                )
+            print(line, end="", flush=True)
+        rc = proc.wait()
+        if rc != 0:
+            err = "".join(logs).strip()
             raise RuntimeError(f"{os.path.basename(script_path)} failed:\n{err}")
 
 
